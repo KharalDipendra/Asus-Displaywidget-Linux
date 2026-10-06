@@ -1,0 +1,5 @@
+# Let the logged-in user open I2C buses that belong to a graphics card
+# (needed for DDC/CI). Same match as ddcutil's rule: display controller PCI classes only,
+# so SMBus / RAM SPD buses stay root-only.
+SUBSYSTEM=="i2c-dev", KERNEL=="i2c-[0-9]*", ATTRS{class}=="0x030000", TAG+="uaccess"
+SUBSYSTEM=="i2c-dev", KERNEL=="i2c-[0-9]*", ATTRS{class}=="0x038000", TAG+="uaccess"

@@ -1,0 +1,16 @@
+[package]
+name = "asusdisplay"
+version = "0.2.0"
+edition = "2024"
+description = "Control ASUS monitors over DDC/CI on Linux"
+repository = "https://github.com/KharalDipendra/Asus-Displaywidget-Linux"
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+libc = "0.2"
+serde = { version = "1", features = ["derive"] }
+
+[profile.release]
+lto = true
+opt-level = "s"
+strip = true

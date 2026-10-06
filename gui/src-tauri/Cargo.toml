@@ -1,0 +1,18 @@
+[package]
+name = "asusdisplay-gui"
+version = "0.2.0"
+edition = "2024"
+description = "Desktop app for asusdisplay"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+asusdisplay = { path = "../.." }
+serde = { version = "1", features = ["derive"] }
+tauri = { version = "2", features = [] }
+
+[profile.release]
+lto = true
+opt-level = "s"
+strip = true

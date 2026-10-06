@@ -1,0 +1,8 @@
+target/
+node_modules/
+gui/dist/
+gui/src-tauri/gen/
+
+# Local only: notes for Claude Code, and the decompiled ASUS app (copyright, contains monitor serials).
+CLAUDE.md
+re/
