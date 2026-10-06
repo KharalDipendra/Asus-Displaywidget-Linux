@@ -86,7 +86,7 @@ ASUS private codes (`VCPAPI.cs` + `AirVisionVCPCode.cs` enum names):
 | Code | Name in app | gen | Values |
 |---|---|---|---|
 | 0xDC | DisplayApplication (GameVisual / Splendid) | any | see §4 |
-| 0xE0 | TraceFree / Variable OD | any | continuous, steps of 20 (not on OLED) |
+| 0xE0 | TraceFree / Variable OD | any | index 0..max (shown x20 on legacy/MainStream/ProArt); hidden on OLED |
 | 0xE1 | PowerSaving | **new** | 0 Standard, 1 Power Saving |
 | 0xE1 | ASCR | legacy | 0/1 |
 | 0xE2 | HDRSettings | **new** | 0 none (SDR), 0x0101 Cinema, 0x0102 Gaming, 0x0103 Console, 0x0104 HDR400 True Black, 0x0108 HDR500 True Black, 0x0205–0x0208 Dolby Vision Bright/Dark/Gaming/Source-only. Capability strings list the low byte. XG27ACDMS max = 0x0104 |
@@ -95,8 +95,8 @@ ASUS private codes (`VCPAPI.cs` + `AirVisionVCPCode.cs` enum names):
 | 0xE5 | Shadow Boost (Gaming) / Dynamic dimming (ProArt) | any | 0 off, 1–4 |
 | 0xE6 | Blue Light Filter | any | 0–4 |
 | 0xE7 | QuickFit / display alignment | any | 0/1 |
-| 0xE8 | GamePlus icon position | any | 1–4 (caps say 1–8; both monitors reject reads) |
-| 0xE9 | OSDSettings | any | unknown |
+| 0xE8 | GamePlus icon position | any | **write-only nudge**: 1 Up, 2 Down, 3 Right, 4 Left (hidden if caps list 0xFE) |
+| 0xE9 | OSDSettings | any | enum name only; the app never reads or writes it |
 | 0xEA | FPS counter | any | 0 off, 1, 2 |
 | 0xEB | OSD instruction (virtual OSD keys) | any | 0 Close, 1 Show, 2 Up, 3 Down, 4 Right, 5 Left, 6 Enter, 7 Back, 8 InputSelect, 9 QuickFit, 10 Shortcut1, 11 Shortcut2, 12 SelfCalibration |
 | 0xEC | RestoreModeDefaults | any | 1 = reset current mode |
@@ -170,11 +170,24 @@ Codes the app saves per profile, which is a good "everything that matters" list:
 - Gaming: DC E2 14 E6 10 12 16 18 1A 59–5F 72 87 8A 90 E0 E1 E3 E5 EA EE FC FD
 - ProArt: E3 14 E6 10 12 16 18 1A 6B 6C 6E 70 72 87 8A 90 E0 E1 E4 E5 F2 FC FD
 
-## 7. Open questions
+## 7. Answered by a full decompile audit
 
-- Meaning of 0xE9, 0xF7, 0xFA, 0xFC bits, 0xDD, 0x5F, 0x61 and the 0x0100/0x0200 high bytes in DC.
-- Crosshair style names (the app shows pictures, not strings).
-- PG49WCD's built-in string uses different picture-mode numbers (`DC(03 0B 0D 0E 11 12 13 14 20)`) and
-  `EE(00 1E 28 32 3C 5A)`, which looks like 0/30/40/50/60/90 minutes.
+A later audit of the whole decompiled app resolved most of the earlier unknowns:
 
-To probe safely: `asusdisplay raw 0xE9`, change the setting in the monitor's OSD, read it again.
+- **0xFC** — the app never reads or writes individual bits; `CapabilityConfigManager` reads the caps
+  token: low byte bit `0x08` = Audio Mute, `0x10` = Auto Source Detection. Other bits unknown.
+- **0xE4 timer** — 1–5 = 30/40/50/60/90 minutes.
+- **0xE8** — a write-only position nudge (1 Up, 2 Down, 3 Right, 4 Left), not a value you read back.
+- **0xED** — Rest Reminder, 0 off then 1–12 = 5–60 minutes.
+- **0xAA** — orientation, read-only: 1/0xF1 = 0°, 2/0xF3 = 90°, 3/0xF2 = 180°, 4/0xF0 = 270°.
+- **0x79** — MCU firmware (ProArt self-calibration models); 254 = none.
+- **0xE2 HDR** — high byte is the signal group (1 HDR10, 2 Dolby Vision); the app never writes `0x0000`.
+- **ProArt presets (0xE3)** — SDR presets are `preset << 8 | 0xFF`; HDR presets are full values
+  (0x0F00/0x1000/0x1400, 0x1303/0x1304); HLG (0x11FF/0x12FF) is a two-step write.
+- **Colour temperature (0x14)** — the same codes have different names per product line.
+- **Crosshair (0xE3)** — 1 Red Dot, 2 Green Dot, 3/4 Red/Green Bullseye, 5/6 Rangefinder,
+  7 Blue Dot, 8 Green Dot, 9/10 Mini Duplex, 11/12 Heavy Duplex. 13–15 unnamed.
+
+Still open: 0xF7, 0xFA, 0xDD, 0x5F, 0x61 and the `0x0100/0x0200` high bytes in 0xDC are enum names
+or caps tokens the app never decodes. To probe one safely: `asusdisplay raw 0xNN`, change the
+setting in the monitor's OSD, and read it again.

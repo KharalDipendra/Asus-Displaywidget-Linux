@@ -51,6 +51,8 @@ enum Command {
         #[arg(allow_hyphen_values = true)]
         value: String,
     },
+    /// List settings the monitor doesn't expose, and why
+    Debug,
     /// Print the monitor's capabilities string
     Caps,
     /// Read or write any VCP code, without checks
@@ -58,6 +60,21 @@ enum Command {
         code: String,
         value: Option<String>,
     },
+    /// Control the monitor light bar (USB HID 0b05:1ac8)
+    Lightbar {
+        #[command(subcommand)]
+        action: LightbarAction,
+    },
+}
+
+#[derive(Subcommand)]
+enum LightbarAction {
+    /// White light: brightness 0-100, temperature 2700-6500 K
+    White { brightness: u8, kelvin: u16 },
+    /// Colour: effect is static/breath/strobe/cycle/rainbow, then R G B (0-255)
+    Rgb { effect: String, r: u8, g: u8, b: u8 },
+    /// Turn the light bar off
+    Off,
 }
 
 fn main() -> ExitCode {
@@ -71,10 +88,15 @@ fn main() -> ExitCode {
 }
 
 fn run(cli: &Cli) -> Result<()> {
+    if let Command::Lightbar { action } = &cli.command {
+        return lightbar(action);
+    }
+
     let options = Options { bus: cli.bus, sleep_multiplier: cli.sleep_mult, verbose: cli.verbose };
     let mut monitors = asusdisplay::enumerate(&options);
     if monitors.is_empty() {
-        return Err("no DDC/CI monitors found. Load i2c-dev and install the udev rule (see README), or retry with -v".into());
+        let hint = if cfg!(target_os = "linux") { "Load i2c-dev and install the udev rule (see README), or retry with -v" } else { "check the monitor supports DDC/CI and it's enabled in the OSD" };
+        return Err(format!("no DDC/CI monitors found. {hint}"));
     }
 
     if matches!(cli.command, Command::List) {
@@ -150,6 +172,15 @@ fn command(m: &mut Monitor, cli: &Cli) -> Result<()> {
             let f = m.feature(feature).ok_or_else(|| format!("unknown feature '{feature}', see 'features --all'"))?;
             m.write(&f, value, cli.force)?;
         }
+        Command::Debug => {
+            let un = m.unsupported();
+            if un.is_empty() {
+                println!("every known setting is supported on this monitor");
+            }
+            for s in un {
+                println!("{:<24} 0x{:02X}  {}", s.feature.key, s.feature.code, s.reason);
+            }
+        }
         Command::Caps => {
             let caps = m.capabilities()?;
             println!("{}\n", caps.raw);
@@ -168,6 +199,29 @@ fn command(m: &mut Monitor, cli: &Cli) -> Result<()> {
                 println!("current {0} (0x{0:04X}), max {1} (0x{1:04X})", vcp.current, vcp.max);
             }
         }
+        Command::Lightbar { .. } => unreachable!("handled before selecting monitors"),
     }
     Ok(())
+}
+
+fn lightbar(action: &LightbarAction) -> Result<()> {
+    use asusdisplay::lightbar::{self, Effect};
+
+    let mut bars = lightbar::find();
+    let bar = bars.first_mut().ok_or("no light bar found (USB 0b05:1ac8)")?;
+    match action {
+        LightbarAction::Off => bar.off(),
+        LightbarAction::White { brightness, kelvin } => bar.set_white(*brightness, *kelvin),
+        LightbarAction::Rgb { effect, r, g, b } => {
+            let effect = match effect.to_ascii_lowercase().as_str() {
+                "static" => Effect::Static,
+                "breath" => Effect::Breath,
+                "strobe" => Effect::Strobe,
+                "cycle" => Effect::Cycle,
+                "rainbow" => Effect::Rainbow,
+                _ => return Err("effect is static, breath, strobe, cycle or rainbow".into()),
+            };
+            bar.set_rgb(effect, *r, *g, *b)
+        }
+    }
 }

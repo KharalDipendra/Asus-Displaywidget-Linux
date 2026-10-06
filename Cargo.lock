@@ -59,6 +59,7 @@ dependencies = [
  "clap",
  "libc",
  "serde",
+ "windows-sys",
 ]
 
 [[package]]

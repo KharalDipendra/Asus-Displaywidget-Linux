@@ -1,19 +1,24 @@
-//! Control ASUS monitors over DDC/CI on Linux.
+//! Control ASUS monitors over DDC/CI on Linux and Windows.
 //!
 //! Settings are standard DDC/CI (VESA MCCS) plus ASUS's private VCP codes (0xDC, 0xE0-0xFF),
 //! reverse engineered from ASUS DisplayWidget Center. See `docs/PROTOCOL.md`.
 
 mod caps;
 mod features;
-mod linux;
+pub mod lightbar;
 mod monitor;
 
-#[cfg(not(target_os = "linux"))]
-compile_error!("asusdisplay talks to monitors through Linux's i2c-dev and only builds on Linux");
+#[cfg(target_os = "linux")]
+mod linux;
+#[cfg(windows)]
+mod windows;
+
+#[cfg(not(any(target_os = "linux", windows)))]
+compile_error!("asusdisplay only supports Linux (i2c-dev) and Windows (dxva2)");
 
 pub use caps::Capabilities;
 pub use features::{Choice, Feature, Kind, ProductLine};
-pub use monitor::{Monitor, Reading, parse_number};
+pub use monitor::{Monitor, Reading, Support, parse_number};
 
 pub type Result<T> = std::result::Result<T, String>;
 
@@ -50,7 +55,14 @@ impl Default for Options {
 
 /// Every monitor that answers DDC/CI, ASUS first.
 pub fn enumerate(options: &Options) -> Vec<Monitor> {
+    #[cfg(target_os = "linux")]
     let mut monitors = linux::enumerate(options);
+    #[cfg(windows)]
+    let mut monitors = {
+        let _ = options;
+        windows::enumerate()
+    };
+
     monitors.sort_by_key(|m| (!m.is_asus(), m.id.to_lowercase()));
     monitors
 }

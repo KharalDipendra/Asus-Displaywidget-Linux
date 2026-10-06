@@ -65,7 +65,7 @@ pub fn enumerate(options: &Options) -> Vec<Monitor> {
                 ddc.transfer(EDID_ADDRESS, &[0], &mut data, 0).ok().and_then(|()| Edid::parse(&data))
             });
             // Without an EDID nothing is listening, unless the user picked the bus.
-            (edid.is_some() || options.bus.is_some()).then(|| Monitor::new(Box::new(ddc), format!("/dev/i2c-{bus}"), connector, edid))
+            (edid.is_some() || options.bus.is_some()).then(|| Monitor::new(Box::new(ddc), format!("/dev/i2c-{bus}"), connector, edid, None))
         })
         .collect()
 }

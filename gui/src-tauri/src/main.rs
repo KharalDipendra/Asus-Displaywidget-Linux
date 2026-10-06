@@ -3,7 +3,8 @@ use std::io::ErrorKind;
 use std::path::PathBuf;
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
-use asusdisplay::{Feature, Kind, Monitor, Reading};
+use asusdisplay::lightbar::{self, Effect};
+use asusdisplay::{Feature, Kind, Monitor, Reading, Support};
 use serde::Serialize;
 use tauri::State;
 
@@ -60,6 +61,39 @@ fn set(state: State<'_, Monitors>, index: usize, key: String, value: String, for
     Ok(setting(m, feature))
 }
 
+/// Settings this monitor doesn't expose, with the reason (shown in the dev build only).
+#[tauri::command(async)]
+fn unsupported(state: State<'_, Monitors>, index: usize) -> Result<Vec<Support>, String> {
+    let mut list = state.lock();
+    let m = list.get_mut(index).ok_or("monitor not found")?;
+    Ok(m.unsupported())
+}
+
+#[tauri::command]
+fn lightbars() -> Vec<String> {
+    lightbar::find().iter().map(|b| b.path().to_string()).collect()
+}
+
+#[tauri::command]
+fn lightbar_set(white: Option<(u8, u16)>, rgb: Option<(String, u8, u8, u8)>) -> Result<(), String> {
+    let mut bars = lightbar::find();
+    let bar = bars.first_mut().ok_or("no light bar found")?;
+    match (white, rgb) {
+        (Some((brightness, kelvin)), _) => bar.set_white(brightness, kelvin),
+        (_, Some((effect, r, g, b))) => {
+            let effect = match effect.as_str() {
+                "breath" => Effect::Breath,
+                "strobe" => Effect::Strobe,
+                "cycle" => Effect::Cycle,
+                "rainbow" => Effect::Rainbow,
+                _ => Effect::Static,
+            };
+            bar.set_rgb(effect, r, g, b)
+        }
+        _ => bar.off(),
+    }
+}
+
 /// XDG autostart entry, picked up by every desktop environment at login.
 fn autostart_file() -> Result<PathBuf, String> {
     let config = std::env::var_os("XDG_CONFIG_HOME")
@@ -93,7 +127,7 @@ fn set_autostart(enabled: bool) -> Result<(), String> {
 fn main() {
     tauri::Builder::default()
         .manage(Monitors::default())
-        .invoke_handler(tauri::generate_handler![monitors, status, set, autostart, set_autostart])
+        .invoke_handler(tauri::generate_handler![monitors, status, set, unsupported, lightbars, lightbar_set, autostart, set_autostart])
         .run(tauri::generate_context!())
         .expect("failed to start the app");
 }

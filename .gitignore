@@ -3,6 +3,9 @@ node_modules/
 gui/dist/
 gui/src-tauri/gen/
 
-# Local only: notes for Claude Code, and the decompiled ASUS app (copyright, contains monitor serials).
+# Local only: notes for Claude Code, the raw UI drop-in, and the decompiled ASUS
+# app (ASUS copyright, contains monitor serials).
 CLAUDE.md
+NEW UI/
 re/
+crates/
