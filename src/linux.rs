@@ -28,6 +28,8 @@ pub fn enumerate(options: &Options) -> Vec<Monitor> {
     };
 
     let mut buses: BTreeMap<u32, (Option<String>, Option<Edid>)> = BTreeMap::new();
+    // Buses a connected connector owns, so the adapter scan doesn't list the same monitor twice.
+    let mut claimed = Vec::new();
     if let Some(bus) = options.bus {
         buses.insert(bus, (None, None));
     } else {
@@ -42,13 +44,14 @@ pub fn enumerate(options: &Options) -> Vec<Monitor> {
             let edid = fs::read(conn.join("edid")).ok().and_then(|data| Edid::parse(&data));
             let connector = name_of(&conn).split_once('-').map(|(_, c)| c.to_string());
             log(format!("{}: i2c-{bus}", name_of(&conn)));
+            claimed.extend(ddc_link_bus(&conn));
             buses.insert(bus, (connector, edid));
         }
 
         for dir in children("/sys/class/i2c-dev") {
             let Some(bus) = parse_bus(&name_of(&dir)) else { continue };
             let adapter = read_text(&dir.join("name"));
-            if !buses.contains_key(&bus) && is_gpu_adapter(&adapter) {
+            if !buses.contains_key(&bus) && !claimed.contains(&bus) && is_gpu_adapter(&adapter) {
                 log(format!("i2c-{bus} ({adapter}): probing"));
                 buses.insert(bus, (None, None));
             }
@@ -86,11 +89,14 @@ fn parse_bus(name: &str) -> Option<u32> {
     name.strip_prefix("i2c-")?.parse().ok()
 }
 
+fn ddc_link_bus(conn: &Path) -> Option<u32> {
+    fs::canonicalize(conn.join("ddc")).ok().and_then(|target| parse_bus(&name_of(&target)))
+}
+
+/// DP-AUX child first: on DisplayPort the `ddc` link (amdgpu's "DM i2c hw bus") reads EDID but
+/// fails DDC/CI writes with EIO. HDMI/DVI have no AUX child and use the `ddc` link.
 fn connector_bus(conn: &Path) -> Option<u32> {
-    fs::canonicalize(conn.join("ddc"))
-        .ok()
-        .and_then(|target| parse_bus(&name_of(&target)))
-        .or_else(|| children(&conn.to_string_lossy()).find_map(|child| parse_bus(&name_of(&child))))
+    children(&conn.to_string_lossy()).find_map(|child| parse_bus(&name_of(&child))).or_else(|| ddc_link_bus(conn))
 }
 
 fn is_gpu_adapter(name: &str) -> bool {
